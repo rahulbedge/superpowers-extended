@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+# PreToolUse + UserPromptExpansion hook for superpowers plugin.
+# Injects extension .md files when a Skill is invoked — regardless of whether
+# the model calls the Skill tool (PreToolUse) or the user types a slash command
+# (UserPromptExpansion).
+#
+# Reads stdin JSON from Claude Code, detects the event type, extracts the skill
+# name from the appropriate field, and injects guardrail content via
+# additionalContext. Prints a visible confirmation to stderr so the user knows
+# extensions were loaded.
+
+set -euo pipefail
+
+# Escape string for JSON embedding using bash parameter substitution.
+escape_for_json() {
+    local s="$1"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    s="${s//$'\n'/\\n}"
+    s="${s//$'\r'/\\r}"
+    s="${s//$'\t'/\\t}"
+    printf '%s' "$s"
+}
+
+# Determine plugin root directory
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+# Passthrough helper — allows the action without injecting context
+passthrough() {
+    local event_name="${1:-PreToolUse}"
+    if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -z "${COPILOT_CLI:-}" ]; then
+        printf '{"hookSpecificOutput":{"hookEventName":"%s","permissionDecision":"allow"}}\n' "$event_name"
+    elif [ -n "${CURSOR_PLUGIN_ROOT:-}" ]; then
+        printf '{"decision":"allow"}\n'
+    else
+        printf '{"hookSpecificOutput":{"hookEventName":"%s","permissionDecision":"allow"}}\n' "$event_name"
+    fi
+    exit 0
+}
+
+# Read stdin
+input=$(cat)
+
+# Detect event type
+hook_event=$(echo "$input" | sed -n 's/.*"hook_event_name":"\([^"]*\)".*/\1/p')
+
+# Extract skill name based on event type
+if [ "$hook_event" = "PreToolUse" ]; then
+    # Model calling Skill tool: extract from tool_input.skill
+    tool_name=$(echo "$input" | sed -n 's/.*"tool_name":"\([^"]*\)".*/\1/p')
+    if [ "$tool_name" != "Skill" ]; then
+        passthrough PreToolUse
+    fi
+    skill_name=$(echo "$input" | sed -n 's/.*"skill":"\([^"]*\)".*/\1/p')
+elif [ "$hook_event" = "UserPromptExpansion" ]; then
+    # User typed /skillname: extract from command_name
+    expansion_type=$(echo "$input" | sed -n 's/.*"expansion_type":"\([^"]*\)".*/\1/p')
+    if [ "$expansion_type" != "slash_command" ]; then
+        passthrough UserPromptExpansion
+    fi
+    skill_name=$(echo "$input" | sed -n 's/.*"command_name":"\([^"]*\)".*/\1/p')
+else
+    passthrough PreToolUse
+fi
+
+if [ -z "$skill_name" ]; then
+    passthrough "${hook_event:-PreToolUse}"
+fi
+
+# Strip plugin namespace prefix (e.g., "superpowers:brainstorming" -> "brainstorming")
+short_name="$skill_name"
+if [[ "$skill_name" == *:* ]]; then
+    short_name="${skill_name#*:}"
+fi
+
+extensions_dir="${PLUGIN_ROOT}/extensions/${short_name}"
+
+if [ ! -d "$extensions_dir" ]; then
+    passthrough "${hook_event:-PreToolUse}"
+fi
+
+# Collect all .md files recursively
+md_files=$(find "$extensions_dir" -name "*.md" -type f 2>/dev/null | sort)
+
+if [ -z "$md_files" ]; then
+    passthrough "${hook_event:-PreToolUse}"
+fi
+
+# Build injected context by concatenating all .md files
+context_parts=""
+file_count=0
+while IFS= read -r f; do
+    if [ -n "$context_parts" ]; then
+        context_parts="${context_parts}\\n\\n---\\n\\n"
+    fi
+    rel_path="${f#"${PLUGIN_ROOT}/"}"
+    content=$(cat "$f")
+    escaped_content=$(escape_for_json "$content")
+    context_parts="${context_parts}## ${rel_path}\\n\\n${escaped_content}"
+    file_count=$((file_count + 1))
+done <<< "$md_files"
+
+# Visible confirmation to stderr so the user knows extensions were loaded
+printf '\n🔧 Superpowers: %s — %d guardrail file(s) loaded\n\n' "$short_name" "$file_count" >&2
+
+additional_context="<EXTREMELY_IMPORTANT>\\n🔧 Superpowers: ${short_name} loaded with ${file_count} extension file(s)\\n\\nThe following extension content has been loaded for skill \\\"${short_name}\\\":\\n\\n${context_parts}\\n</EXTREMELY_IMPORTANT>"
+
+# Output hook response. Same platform detection as session-start.
+if [ -n "${CURSOR_PLUGIN_ROOT:-}" ]; then
+    printf '{"additional_context":"%s"}\n' "$additional_context"
+elif [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -z "${COPILOT_CLI:-}" ]; then
+    printf '{"hookSpecificOutput":{"hookEventName":"%s","permissionDecision":"allow","additionalContext":"%s"}}\n' "$hook_event" "$additional_context"
+else
+    printf '{"hookSpecificOutput":{"hookEventName":"%s","permissionDecision":"allow","additionalContext":"%s"}}\n' "$hook_event" "$additional_context"
+fi
+
+exit 0

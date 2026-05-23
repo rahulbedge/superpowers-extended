@@ -1,13 +1,13 @@
 {
-  "name": "superpowers",
-  "description": "Core skills library for Claude Code: TDD, debugging, collaboration patterns, and proven techniques",
-  "version": "5.1.0",
+  "name": "superpowers-extended",
+  "description": "Superpowers core skills library extended with additional guardrails and skill extensions",
+  "version": "5.1.0.1",
   "author": {
-    "name": "Jesse Vincent",
-    "email": "jesse@fsck.com"
+    "name": "Rahul Bedge",
+    "email": "rahul@bedge.in"
   },
-  "homepage": "https://github.com/obra/superpowers",
-  "repository": "https://github.com/obra/superpowers",
+  "homepage": "https://github.com/rahulbedge/superpowers-extended",
+  "repository": "https://github.com/rahulbedge/superpowers-extended",
   "license": "MIT",
   "keywords": [
     "skills",
@@ -15,6 +15,8 @@
     "debugging",
     "collaboration",
     "best-practices",
-    "workflows"
+    "workflows",
+    "guardrails",
+    "extensions"
   ]
 }

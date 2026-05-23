@@ -1,19 +1,19 @@
 {
-  "name": "superpowers-dev",
-  "description": "Development marketplace for Superpowers core skills library",
+  "name": "rahul-claude-plugins",
+  "description": "Superpowers extended with additional skill-level guardrails and extensions",
   "owner": {
-    "name": "Jesse Vincent",
-    "email": "jesse@fsck.com"
+    "name": "Rahul Bedge",
+    "email": "rahul@bedge.in"
   },
   "plugins": [
     {
-      "name": "superpowers",
-      "description": "Core skills library for Claude Code: TDD, debugging, collaboration patterns, and proven techniques",
-      "version": "5.1.0",
+      "name": "superpowers-extended",
+      "description": "Superpowers core skills library extended with additional guardrails and skill extensions",
+      "version": "5.1.0.1",
       "source": "./",
       "author": {
-        "name": "Jesse Vincent",
-        "email": "jesse@fsck.com"
+        "name": "Rahul Bedge",
+        "email": "rahul@bedge.in"
       }
     }
   ]
